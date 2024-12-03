@@ -293,6 +293,115 @@ import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com
           showLoginModal();
         }
       };
+
+       // Add a function to show the custom activity modal
+    window.showCustomActivityModal = function() {
+        document.getElementById('custom-activity-modal').classList.remove('hidden');
+      };
+  
+      // Close the custom activity modal
+      window.closeCustomActivityModal = function() {
+        document.getElementById('custom-activity-modal').classList.add('hidden');
+        // Reset form
+        document.getElementById('custom-activity-name').value = '';
+        document.getElementById('custom-activity-icon').value = '';
+      };
+  
+      // Submit custom activity
+      window.submitCustomActivity = function() {
+        const activityName = document.getElementById('custom-activity-name').value.trim();
+        let activityIcon = document.getElementById('custom-activity-icon').value.trim();
+        
+        if (activityName && activityIcon) {
+          // Automatically prefix icon with Font Awesome classes if not already prefixed
+          if (!activityIcon.startsWith('fa-')) {
+            activityIcon = `fas fa-${activityIcon}`;
+          }
+          
+          // If no prefix is given, assume 'fas'
+          if (!activityIcon.startsWith('fa')) {
+            activityIcon = `fas ${activityIcon}`;
+          }
+          
+          // Use a random color for the custom activity
+          const colors = [
+            '#3B82F6', '#10B981', '#6366F1', '#F472B6', 
+            '#9333EA', '#F59E0B', '#EF4444', '#34D399'
+          ];
+          const randomColor = colors[Math.floor(Math.random() * colors.length)];
+          
+          // Add the activity
+          addActivity(activityName, activityIcon, randomColor);
+          
+          // Close the modal
+          closeCustomActivityModal();
+        } else {
+          alert('Please enter both activity name and icon name');
+        }
+      };
+
+      window.previewIcon = function() {
+        const iconInput = document.getElementById('custom-activity-icon');
+        const iconPreviewContainer = document.getElementById('icon-preview');
+        let iconName = iconInput.value.trim();
+      
+        // Clear previous preview
+        iconPreviewContainer.innerHTML = '';
+      
+        if (iconName) {
+          // Automatically prefix icon with Font Awesome classes if not already prefixed
+          if (!iconName.startsWith('fa-')) {
+            iconName = `fas fa-${iconName}`;
+          }
+          
+          // If no prefix is given, assume 'fas'
+          if (!iconName.startsWith('fa')) {
+            iconName = `fas ${iconName}`;
+          }
+      
+          // Create the icon element
+          const iconElement = document.createElement('i');
+          iconElement.className = `${iconName} text-4xl text-black`;
+          
+          // Add the icon to the preview container
+          iconPreviewContainer.appendChild(iconElement);
+        }
+      };
+      
+      // Modify the existing submitCustomActivity function to use this
+      window.submitCustomActivity = function() {
+        const activityName = document.getElementById('custom-activity-name').value.trim();
+        let activityIcon = document.getElementById('custom-activity-icon').value.trim();
+        
+        if (activityName && activityIcon) {
+          // Automatically prefix icon with Font Awesome classes if not already prefixed
+          if (!activityIcon.startsWith('fa-')) {
+            activityIcon = `fas fa-${activityIcon}`;
+          }
+          
+          // If no prefix is given, assume 'fas'
+          if (!activityIcon.startsWith('fa')) {
+            activityIcon = `fas ${activityIcon}`;
+          }
+          
+          // Use a random color for the custom activity
+          const colors = [
+            '#3B82F6', '#10B981', '#6366F1', '#F472B6', 
+            '#9333EA', '#F59E0B', '#EF4444', '#34D399'
+          ];
+          const randomColor = colors[Math.floor(Math.random() * colors.length)];
+          
+          // Add the activity
+          addActivity(activityName, activityIcon, randomColor);
+          
+          // Close the modal
+          closeCustomActivityModal();
+        } else {
+          alert('Please enter both activity name and icon name');
+        }
+      };
+    
+  
   </script>
   
   <style>
@@ -437,6 +546,14 @@ import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com
             <i class="fa-regular fa-rectangle-list"></i>
 
         </button>
+
+        <button 
+        onclick="showCustomActivityModal()" 
+       class="px-2 py-2 text-gray-500 rounded-lg w-1/6"
+        title="Add Custom Activity"
+      >
+        <i class="fas fa-plus"></i>
+      </button> 
     </div>
     </div>
 
@@ -638,6 +755,58 @@ import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com
     </div>
     <div id="activity-log" class="space-y-3">
       <!-- Activities will be dynamically added here -->
+    </div>
+  </div>
+
+  <div id="custom-activity-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white w-11/12 max-w-md rounded-xl p-6">
+      <h2 class="text-2xl font-bold mb-4">Add Custom Activity</h2>
+      
+      <div class="mb-4">
+        <label class="block text-gray-700 text-sm font-bold mb-2" for="custom-activity-name">
+          Activity Name
+        </label>
+        <input 
+          type="text" 
+          id="custom-activity-name" 
+          class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+          placeholder="Enter activity name"
+        >
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-gray-700 text-sm font-bold mb-2" for="custom-activity-icon">
+          Add Icons
+        </label>
+        <div class="flex items-center space-x-2">
+          <input 
+            type="text" 
+            id="custom-activity-icon" 
+            oninput="previewIcon()"
+            class="shadow appearance-none border rounded w-full py-2 px-3  text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+            placeholder="star, home"
+          >
+          <div id="icon-preview" class="flex items-center justify-center">
+            <!-- Icon preview will appear here -->
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Type an icon name (e.g., star, home, book) to preview</p>
+      </div>
+      
+      <div class="flex space-x-4">
+        <button 
+          onclick="submitCustomActivity()" 
+          class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+        >
+          Add Activity
+        </button>
+        <button 
+          onclick="closeCustomActivityModal()" 
+          class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   </div>
   </div>
