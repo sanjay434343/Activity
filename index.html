@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activity Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/js/all.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  
+  <script type="module">
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyC-nKyC-hpcOj1e0IKMh9E8VqOKvkKr3L4",
+      authDomain: "chatzi-96d60.firebaseapp.com",
+      databaseURL: "https://chatzi-96d60-default-rtdb.firebaseio.com",
+      projectId: "chatzi-96d60",
+      storageBucket: "chatzi-96d60.appspot.com",
+      messagingSenderId: "8860860390",
+      appId: "1:8860860390:android:9583a63e784a116e3c6027",
+    };
+  
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.17.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.17.2/firebase-auth.js";
+import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/9.17.2/firebase-database.js";
+
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const database = getDatabase(app);
+    const googleProvider = new GoogleAuthProvider();
+
+    // Encryption key (in a real app, this would be more securely managed)
+    const ENCRYPTION_KEY = 'my-super-secret-activity-tracker-key';
+
+    // Encrypt data
+    function encryptData(data) {
+      return CryptoJS.AES.encrypt(JSON.stringify(data), ENCRYPTION_KEY).toString();
+    }
+
+    // Decrypt data
+    function decryptData(encryptedData) {
+      try {
+        const bytes = CryptoJS.AES.decrypt(encryptedData, ENCRYPTION_KEY);
+        return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+      } catch (error) {
+        console.error('Decryption failed', error);
+        return null;
+      }
+    }
+
+    // Save encrypted user data
+    function saveUserData(user) {
+      const userData = {
+        uid: user.uid,
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL
+      };
+      localStorage.setItem('encryptedUserData', encryptData(userData));
+    }
+
+    // Retrieve encrypted user data
+    function getSavedUserData() {
+      const encryptedData = localStorage.getItem('encryptedUserData');
+      return encryptedData ? decryptData(encryptedData) : null;
+    }
+
+    // Show loader
+    function showLoader() {
+      document.getElementById('loader-overlay').classList.remove('hidden');
+    }
+
+    // Hide loader
+    function hideLoader() {
+      document.getElementById('loader-overlay').classList.add('hidden');
+    }
+
+    // Show login modal
+    window.showLoginModal = function(activity) {
+      document.getElementById('login-modal').classList.remove('hidden');
+      // Store the pending activity to add after login
+      window.pendingActivity = activity;
+    };
+
+    // Close login modal
+    window.closeLoginModal = function() {
+      document.getElementById('login-modal').classList.add('hidden');
+      window.pendingActivity = null;
+    };
+
+    // Automatic login attempt
+    function attemptAutoLogin() {
+      showLoader();
+      const savedUser = getSavedUserData();
+      
+      if (savedUser) {
+        // Simulate login process
+        setTimeout(() => {
+          updateUIAfterLogin(savedUser);
+          hideLoader();
+        }, 1000);
+      } else {
+        hideLoader();
+      }
+    }
+
+    // Update UI after login
+    function updateUIAfterLogin(user) {
+      const googleLogo = document.getElementById("google-logo");
+      const userName = document.getElementById("user-name");
+      const loginScreen = document.getElementById("login-screen");
+      const mainAppScreen = document.getElementById("main-app-screen");
+
+      if (googleLogo) googleLogo.src = user.photoURL;
+      if (userName) userName.textContent = user.displayName;
+      
+      loginScreen?.classList.add("hidden");
+      mainAppScreen?.classList.remove("hidden");
+      
+      displayActivities(user);
+    }
+
+    // Sign in with Google
+    window.signInWithGoogle = function () {
+      showLoader();
+      signInWithPopup(auth, googleProvider)
+        .then((result) => {
+          const user = result.user;
+          
+          // Save encrypted user data
+          saveUserData(user);
+
+          updateUIAfterLogin(user);
+          
+          // Add pending activity if exists
+          if (window.pendingActivity) {
+            addActivity(
+              window.pendingActivity.name, 
+              window.pendingActivity.icon, 
+              window.pendingActivity.color
+            );
+            window.pendingActivity = null;
+          }
+          
+          document.getElementById("login-modal")?.classList.add("hidden");
+          hideLoader();
+        })
+        .catch((error) => {
+          console.error("Error during Google login:", error);
+          hideLoader();
+        });
+    };
+
+    // Sign out
+    window.signOut = function() {
+      auth.signOut().then(() => {
+        // Remove saved user data
+        localStorage.removeItem('encryptedUserData');
+        
+        // Show login screen
+        document.getElementById("login-screen").classList.remove("hidden");
+        document.getElementById("main-app-screen").classList.add("hidden");
+        
+        // Clear activity log
+        document.getElementById("activity-log").innerHTML = "";
+      }).catch((error) => {
+        console.error("Sign out error", error);
+      });
+    };
+
+    // Add activity function with login check
+    window.addActivity = function (activity, icon, color) {
+      const user = auth.currentUser || getSavedUserData();
+      
+      if (user) {
+        const dbRef = ref(database, "activities");
+        push(dbRef, {
+          activity,
+          timestamp: new Date().toISOString(),
+          userLogo: user.photoURL,
+          userName: user.displayName,
+          activityIcon: icon,
+          activityColor: color
+        });
+      } else {
+        showLoginModal({ name: activity, icon, color });
+      }
+    };
+
+   // Display activities
+function displayActivities(user) {
+    const dbRef = ref(database, "activities");
+    const activityList = document.getElementById("activity-log");
+  
+    onValue(dbRef, (snapshot) => {
+      if (activityList) {
+        activityList.innerHTML = "";
+        const activities = [];
+        snapshot.forEach((childSnapshot) => {
+          const data = childSnapshot.val();
+          activities.push({
+            ...data,
+            timestamp: new Date(data.timestamp).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          });
+        });
+  
+        // Reverse the order to show the last log on top
+        activities.reverse();
+  
+        activities.forEach((data) => {
+          const activityItem = document.createElement("div");
+          activityItem.className = "bg-white shadow-md rounded-lg p-4 flex items-center space-x-4 mb-3 animate-fade-in";
+          activityItem.innerHTML = `
+            <img src="${data.userLogo}" class="w-10 h-10 rounded-full border-2 border-blue-500" alt="${data.userName}">
+            <div class="flex-grow">
+              <div class="flex items-center space-x-2">
+                <i class="${data.activityIcon} text-2xl" style="color: ${data.activityColor}"></i>
+                <span class="font-semibold">${data.activity}</span>
+              </div>
+              <div class="text-xs text-gray-500 mt-2">${data.timestamp}</div>
+            </div>
+          `;
+          activityList.appendChild(activityItem);
+        });
+      }
+    });
+  }
+  
+    // Section toggle function
+    window.toggleSection = function(sectionId) {
+      ['activities-section', 'log-section'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      
+      document.getElementById(sectionId).classList.remove('hidden');
+
+      ['nav-activities', 'nav-log'].forEach(id => {
+        const btn = document.getElementById(id);
+        btn.classList.remove('bg-blue-500', 'text-white');
+        btn.classList.add('text-gray-500');
+      });
+
+      const activeBtn = document.getElementById(`nav-${sectionId.split('-')[0]}`);
+      activeBtn.classList.remove('text-gray-500');
+      activeBtn.classList.add('bg-blue-500', 'text-white');
+    };
+
+    // On window load
+    window.addEventListener('DOMContentLoaded', () => {
+      // Attempt auto login
+      attemptAutoLogin();
+
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          updateUIAfterLogin(user);
+        }
+      });
+    });
+
+    window.clearActivities = function() {
+        const user = auth.currentUser || getSavedUserData();
+        
+        if (user) {
+          // Confirm before clearing
+          const confirmClear = confirm("Are you sure you want to clear all activities? This cannot be undone.");
+          
+          if (confirmClear) {
+            const dbRef = ref(database, "activities");
+            
+            // Remove all activities
+            remove(dbRef)
+              .then(() => {
+                // Optional: Show a success message
+                alert("All activities have been cleared.");
+                
+                // Clear the activity log in the UI
+                const activityList = document.getElementById("activity-log");
+                if (activityList) {
+                  activityList.innerHTML = "";
+                }
+              })
+              .catch((error) => {
+                console.error("Error clearing activities:", error);
+                alert("Failed to clear activities. Please try again.");
+              });
+          }
+        } else {
+          // If no user is logged in, show login modal
+          showLoginModal();
+        }
+      };
+  </script>
+  
+  <style>
+    body {
+      max-width: 480px;
+      margin: 0 auto;
+      background-color: #f0f4f8;
+      padding-bottom: 80px;
+      font-family: 'Arial', sans-serif;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.3s ease-out;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .animate-spin {
+      animation: spin 1s linear infinite;
+    }
+
+    .nav {
+      width: 100%;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      border-radius: 0 0 20px  20px;
+    }
+
+    /* Enhanced button hover and focus states */
+    .activity-button {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .activity-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    .activity-button:focus {
+      outline: none;
+      ring: 2px solid rgba(59, 130, 246, 0.5);
+    }
+
+    span{
+        font-size: 10px;
+    }
+
+    .navs{
+    background-color: #ffffff;
+    width: 50%;
+    padding: 12px;
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    border-radius: 30px;
+    }
+
+    .nav-activities
+    .nav-log{
+        border: 1px solid white;
+        padding: 10px;
+    }
+
+    .logout{
+        padding: 10px 10px;
+        background-color: rgb(255, 188, 188);
+        border-radius: 10px;
+    }
+
+    .ll{
+        font-weight: 500;
+       
+    }
+
+    .load{
+        background-color: #4d4d4d80;
+        backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans overflow-x-hidden relative">
+  <!-- Loader Overlay -->
+  <div id="loader-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center load">
+    <div class="bg-white p-6 rounded-full">
+      <i class="fas fa-spinner text-4xl text-blue-500 animate-spin"></i>
+    </div>
+  </div>
+
+  <!-- Login Modal -->
+  <div id="login-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white w-11/12 max-w-md rounded-xl p-6 text-center">
+      <h2 class="text-2xl font-bold mb-4">Login Required</h2>
+      <p class="mb-6">Please log in to track your activities.</p>
+      <div class="flex space-x-4 justify-center">
+        <button onclick="signInWithGoogle()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center justify-center space-x-2">
+          <i class="fab fa-google"></i>
+          <span>Login with Google</span>
+        </button>
+        <button onclick="closeLoginModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Screen -->
+  <div id="login-screen" class="min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden">
+    <div class="text-center">
+      <h1 class="text-3xl font-bold mb-1 text-blue-500">Activity Tracker</h1>
+      <p class=" mb-4 text-gray-500">Please login to continue</p>
+      <button onclick="signInWithGoogle()" class="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition flex items-center justify-center space-x-2 mx-auto">
+        <i class="fab fa-google"></i>
+        <span>Sign in with Google</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main App Screen -->
+  <div id="main-app-screen" class="hidden">
+    <!-- User Header -->
+    <div class="bg-white shadow-md p-4 flex justify-between items-center nav">
+      <div class="flex items-center space-x-3">
+        <img id="google-logo" src="" alt="User Profile" class="w-12 h-12 rounded-full border-2 border-blue-500">
+        <div>
+          <p id="user-name" class="font-semibold"></p>
+          <p class="text-sm text-gray-500">Activity Tracker</p>
+        </div>
+      </div>
+      <button onclick="signOut()" class="text-red-500 hover:text-red-600 logout">
+        <i class="fas fa-sign-out-alt"></i>
+      </button>
+    </div>
+
+    <!-- Navigation -->
+    <div class="flex justify-center space-x-2 mt-4 mb-4 mx-4 ">
+        <div class="navs">
+        <button id="nav-activities" onclick="toggleSection('activities-section')" class="px-2 py-2 bg-blue-500 text-white rounded-lg w-1/4">
+            <i class="fa-solid fa-bars-staggered"></i>
+        </button>
+        <button id="nav-log" onclick="toggleSection('log-section')" class="px-2 py-2 text-gray-500 rounded-lg w-1/4">
+            <i class="fa-regular fa-rectangle-list"></i>
+
+        </button>
+    </div>
+    </div>
+
+    <!-- Activities Section -->
+    <div id="activities-section" class="p-4">
+      <div class="grid grid-cols-3 gap-4 mb-6">
+
+        <button onclick="addActivity('Good Night d chello❣️❣️', 'fa-solid fa-cloud-moon', '#9333EA')" class="bg-purple-500 text-white p-4 rounded-lg flex flex-col items-center">
+            <i class="fa-solid fa-cloud-moon text-2xl mb-2"></i>
+              <span>Good Night </span>
+            </button>
+
+            <button onclick="addActivity('Good Morning d eruma madu❣️', 'fa-solid fa-cloud-sun', '#9333EA')" class="bg-purple-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fa-solid fa-cloud-sun text-2xl mb-2"></i>
+                  <span>Good Morning </span>
+                </button>
+
+                
+            <button onclick="addActivity('Over Problem ', 'fa-solid fa-triangle-exclamation', '#9333EA')" class="bg-red-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fa-solid fa-triangle-exclamation text-2xl mb-2"></i>
+                  <span>Over Problem </span>
+                </button>
+
+                <button onclick="addActivity('Its ok ', 'fa-solid fa-circle-exclamation', '#9333EA')" class="bg-orange-500 text-white p-4 rounded-lg flex flex-col items-center">
+                    <i class="fa-solid fa-circle-exclamation text-2xl mb-2"></i>
+                      <span>It's ok </span>
+                    </button>
+
+            <button onclick="addActivity('Painting', 'fas fa-paint-brush', '#9333EA')" class="bg-green-500 text-white p-4 rounded-lg flex flex-col items-center">
+                 <i class="fa-regular fa-face-laugh-beam  text-2xl mb-2"></i>
+                <span> No Problem </span>
+                        </button>
+
+                        <button onclick="addActivity('At Work', 'fa-solid fa-building', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                            <i class="fa-solid fa-building text-2xl mb-2"></i>
+                            <span>At Work</span>
+                          </button>
+
+  <button onclick="addActivity('Saptiyaa', ' fa-solid fa-utensils', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                            <i class="fa-solid fa-utensils text-2xl mb-2"></i>
+                            <span>Saptiyaa</span>
+                          </button>
+
+                          <button onclick="addActivity('Yes', 'fa-regular fa-thumbs-up', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                            <i class="fa-regular fa-thumbs-up text-2xl mb-2"></i>
+                            <span>Yes</span>
+                          </button>
+
+                          <button onclick="addActivity('NO', 'fa-regular fa-circle-xmark', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                            <i class="fa-regular fa-circle-xmark text-2xl mb-2"></i>
+                            <span>No</span>
+                          </button>
+
+                          <button onclick="addActivity('Ok Going', 'fa-brands fa-golang', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                            <i class="fa-brands fa-golang text-2xl mb-2"></i>
+                            <span>Ok Going</span>
+                          </button>
+                       
+
+            <button onclick="addActivity('Reading', 'fas fa-book', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-book text-2xl mb-2"></i>
+                <span>Reading</span>
+              </button>
+              
+              <!-- Button 2 -->
+              <button onclick="addActivity('Exercise', 'fas fa-dumbbell', '#10B981')" class="bg-green-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-dumbbell text-2xl mb-2"></i>
+                <span>Exercise</span>
+              </button>
+            
+              <!-- Button 3 -->
+              <button onclick="addActivity('Coding', 'fas fa-laptop-code', '#6366F1')" class="bg-indigo-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-laptop-code text-2xl mb-2"></i>
+                <span>Coding</span>
+              </button>
+            
+              <!-- Button 4 -->
+              <button onclick="addActivity('Drawing', 'fas fa-paint-brush', '#F472B6')" class="bg-pink-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-paint-brush text-2xl mb-2"></i>
+                <span>Drawing</span>
+              </button>
+            
+              <!-- Button 5 -->
+              <button onclick="addActivity('Music', 'fas fa-music', '#9333EA')" class="bg-purple-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-music text-2xl mb-2"></i>
+                <span>Music</span>
+              </button>
+            
+              <!-- Button 6 -->
+              <button onclick="addActivity('Swimming', 'fas fa-swimmer', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-swimmer text-2xl mb-2"></i>
+                <span>Swimming</span>
+              </button>
+            
+              <!-- Button 7 -->
+              <button onclick="addActivity('Gaming', 'fas fa-gamepad', '#F59E0B')" class="bg-yellow-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-gamepad text-2xl mb-2"></i>
+                <span>Gaming</span>
+              </button>
+            
+              <!-- Button 8 -->
+              <button onclick="addActivity('Cooking', 'fas fa-utensils', '#EF4444')" class="bg-red-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-utensils text-2xl mb-2"></i>
+                <span>Cooking</span>
+              </button>
+            
+              <!-- Button 9 -->
+              <button onclick="addActivity('Traveling', 'fas fa-plane', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-plane text-2xl mb-2"></i>
+                <span>Traveling</span>
+              </button>
+            
+              <!-- Button 10 -->
+              <button onclick="addActivity('Photography', 'fas fa-camera', '#F59E0B')" class="bg-yellow-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-camera text-2xl mb-2"></i>
+                <span>Photography</span>
+              </button>
+            
+              <!-- Button 11 -->
+              <button onclick="addActivity('Running', 'fas fa-running', '#F43F5E')" class="bg-pink-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-running text-2xl mb-2"></i>
+                <span>Running</span>
+              </button>
+            
+              <!-- Button 12 -->
+              <button onclick="addActivity('Cycling', 'fas fa-bicycle', '#6EE7B7')" class="bg-teal-400 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-bicycle text-2xl mb-2"></i>
+                <span>Cycling</span>
+              </button>
+            
+              <!-- Button 13 -->
+              <button onclick="addActivity('Dancing', 'fas fa-dance', '#9333EA')" class="bg-purple-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-dance text-2xl mb-2"></i>
+                <span>Dancing</span>
+              </button>
+            
+              <!-- Button 14 -->
+              <button onclick="addActivity('Reading News', 'fas fa-newspaper', '#3B82F6')" class="bg-blue-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-newspaper text-2xl mb-2"></i>
+                <span>Reading News</span>
+              </button>
+            
+              <!-- Button 15 -->
+              <button onclick="addActivity('Fishing', 'fas fa-fish', '#10B981')" class="bg-green-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-fish text-2xl mb-2"></i>
+                <span>Fishing</span>
+              </button>
+            
+              <!-- Button 16 -->
+              <button onclick="addActivity('Baking', 'fas fa-bread-slice', '#F59E0B')" class="bg-yellow-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-bread-slice text-2xl mb-2"></i>
+                <span>Baking</span>
+              </button>
+            
+              <!-- Button 17 -->
+              <button onclick="addActivity('Skateboarding', 'fas fa-skating', '#6366F1')" class="bg-indigo-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-skating text-2xl mb-2"></i>
+                <span>Skateboarding</span>
+              </button>
+            
+              <!-- Button 18 -->
+              <button onclick="addActivity('Hiking', 'fas fa-mountain', '#F472B6')" class="bg-pink-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-mountain text-2xl mb-2"></i>
+                <span>Hiking</span>
+              </button>
+            
+              <!-- Button 19 -->
+              <button onclick="addActivity('Yoga', 'fas fa-yoga', '#F472B6')" class="bg-pink-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fa-solid fa-person-walking text-2xl mb-2"></i>
+                <span>Yoga</span>
+              </button>
+            
+              <!-- Button 20 -->
+              <button onclick="addActivity('Painting', 'fas fa-paint-brush', '#9333EA')" class="bg-purple-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-paint-brush text-2xl mb-2"></i>
+                <span>Painting</span>
+              </button>
+            
+              <button onclick="addActivity('Meditation', 'fas fa-spa', '#34D399')" class="bg-teal-400 text-white p-4 rounded-lg flex flex-col items-center">
+                <i class="fas fa-spa text-2xl mb-2"></i>
+                <span>Meditation</span>
+            </button>
+            
+       
+
+
+      </div>
+    </div>
+
+    <!-- Log Section -->
+   <!-- Log Section -->
+<div id="log-section" class="hidden p-4">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class=" ll">Activity Log</h2>
+      <button onclick="clearActivities()" class="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition flex items-center">
+        <i class="fas fa-trash-alt mr-2"></i>
+        <span>Clear Log</span>
+      </button>
+    </div>
+    <div id="activity-log" class="space-y-3">
+      <!-- Activities will be dynamically added here -->
+    </div>
+  </div>
+  </div>
+</body>
+</html>
