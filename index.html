@@ -188,47 +188,47 @@ import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com
       }
     };
 
-   // Display activities
-function displayActivities(user) {
-    const dbRef = ref(database, "activities");
-    const activityList = document.getElementById("activity-log");
-  
-    onValue(dbRef, (snapshot) => {
-      if (activityList) {
-        activityList.innerHTML = "";
-        const activities = [];
-        snapshot.forEach((childSnapshot) => {
-          const data = childSnapshot.val();
-          activities.push({
-            ...data,
-            timestamp: new Date(data.timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-          });
+    // Display activities
+    function displayActivities(user) {
+        const dbRef = ref(database, "activities");
+        const activityList = document.getElementById("activity-log");
+    
+        onValue(dbRef, (snapshot) => {
+        if (activityList) {
+            activityList.innerHTML = "";
+            const activities = [];
+            snapshot.forEach((childSnapshot) => {
+            const data = childSnapshot.val();
+            activities.push({
+                ...data,
+                timestamp: new Date(data.timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                })
+            });
+            });
+    
+            // Reverse the order to show the last log on top
+            activities.reverse();
+    
+            activities.forEach((data) => {
+            const activityItem = document.createElement("div");
+            activityItem.className = "bg-white shadow-md rounded-lg p-4 flex items-center space-x-4 mb-3 animate-fade-in";
+            activityItem.innerHTML = `
+                <img src="${data.userLogo}" class="w-10 h-10 rounded-full border-2 border-blue-500" alt="${data.userName}">
+                <div class="flex-grow">
+                <div class="flex items-center space-x-2">
+                    <i class="${data.activityIcon} text-2xl" style="color: ${data.activityColor}"></i>
+                    <span class="font-semibold">${data.activity}</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-2">${data.timestamp}</div>
+                </div>
+            `;
+            activityList.appendChild(activityItem);
+            });
+        }
         });
-  
-        // Reverse the order to show the last log on top
-        activities.reverse();
-  
-        activities.forEach((data) => {
-          const activityItem = document.createElement("div");
-          activityItem.className = "bg-white shadow-md rounded-lg p-4 flex items-center space-x-4 mb-3 animate-fade-in";
-          activityItem.innerHTML = `
-            <img src="${data.userLogo}" class="w-10 h-10 rounded-full border-2 border-blue-500" alt="${data.userName}">
-            <div class="flex-grow">
-              <div class="flex items-center space-x-2">
-                <i class="${data.activityIcon} text-2xl" style="color: ${data.activityColor}"></i>
-                <span class="font-semibold">${data.activity}</span>
-              </div>
-              <div class="text-xs text-gray-500 mt-2">${data.timestamp}</div>
-            </div>
-          `;
-          activityList.appendChild(activityItem);
-        });
-      }
-    });
-  }
+    }
   
     // Section toggle function
     window.toggleSection = function(sectionId) {
@@ -455,17 +455,17 @@ function displayActivities(user) {
                 </button>
 
                 
-            <button onclick="addActivity('Over Problem ', 'fa-solid fa-triangle-exclamation', '#9333EA')" class="bg-red-500 text-white p-4 rounded-lg flex flex-col items-center">
+            <button onclick="addActivity('Over Problem ', 'fa-solid fa-triangle-exclamation', '#EA3333FF')" class="bg-red-500 text-white p-4 rounded-lg flex flex-col items-center">
                 <i class="fa-solid fa-triangle-exclamation text-2xl mb-2"></i>
                   <span>Over Problem </span>
                 </button>
 
-                <button onclick="addActivity('Its ok ', 'fa-solid fa-circle-exclamation', '#9333EA')" class="bg-orange-500 text-white p-4 rounded-lg flex flex-col items-center">
+                <button onclick="addActivity('Its ok ', 'fa-solid fa-circle-exclamation', '#FFC146FF')" class="bg-orange-500 text-white p-4 rounded-lg flex flex-col items-center">
                     <i class="fa-solid fa-circle-exclamation text-2xl mb-2"></i>
                       <span>It's ok </span>
                     </button>
 
-            <button onclick="addActivity('Painting', 'fas fa-paint-brush', '#9333EA')" class="bg-green-500 text-white p-4 rounded-lg flex flex-col items-center">
+            <button onclick="addActivity('Painting', 'fa-regular fa-face-laugh-beam', '#33EA33FF')" class="bg-green-500 text-white p-4 rounded-lg flex flex-col items-center">
                  <i class="fa-regular fa-face-laugh-beam  text-2xl mb-2"></i>
                 <span> No Problem </span>
                         </button>
